@@ -89,11 +89,11 @@ public class test extends Application {
 			public void changed(ObservableValue <? extends Number >  
 					observable, Number oldValue, Number newValue) { 
 
+				System.out.println(oldValue.intValue());
 				System.out.println(newValue.intValue());
 				//Here's the basic code you need to update an image
 				TopView.setImage(null); //clear the old image
-		        Image newImage = nearestNeighbor(oldValue.intValue(), oldValue.intValue(), 
-		        		newValue.intValue(), newValue.intValue()); //go get the slice image
+		        Image newImage = nearestNeighbor(76, newValue.intValue()); //go get the slice image to new scale
 				TopView.setImage(newImage); //Update the GUI so the new image is displayed
             } 
         });
@@ -191,22 +191,37 @@ public class test extends Application {
 	}
 	
 	//Scales an image to the desired image size using a nearest neighbor algorithm
-	public Image nearestNeighbor(int oldWidth, int oldHeight, int newWidth, int newHeight) {
-		WritableImage scaledImage = new WritableImage(newWidth, newHeight);
+	public Image nearestNeighbor(int slice, float pixelScale) {
+		//scale factor relative to the default cubic slice size of 256
+		float scaleFactor = pixelScale/256;
+		int srcWidth = 256;
+		int srcHeight = 256;
+		int destWidth = (int) pixelScale;
+		int destHeight = (int) pixelScale;
+		
+		WritableImage scaledImage = new WritableImage(destWidth, destHeight);
+		System.out.println("srcWidth: " + srcWidth);
+		System.out.println("destWidth: " + destWidth);
+		//System.out.println("srcY: " + srcWidth * (100.0/destWidth));
 		
 		PixelWriter image_writer = scaledImage.getPixelWriter();
 		
 		double val;
 		
-		for (int i = 0; i < newHeight; i++) {
-			for (int j = 0; j < newWidth; j++) {
-				int newY = Math.round(i * (oldHeight/newHeight)); 
-				int newX = Math.round(j * (oldWidth/newWidth));
+		for (int i = 0; i < destHeight; i++) {
+			for (int j = 0; j < destWidth; j++) {
+				float currentY = i;
+				float currentX = j;
 				
-				val = grey[76][i][j];
-				Color color=Color.color(val,val,val);
+				int srcY = (int) Math.min(Math.floor(srcHeight * (currentY/destHeight)), srcHeight); 
+				int srcX = (int) Math.min(Math.floor(srcWidth * (currentX/destWidth)), srcWidth);
+				//System.out.println("current x: " + currentX);
+				//System.out.println("x: " + srcX);
 				
-				image_writer.setColor(newX, newY, color);
+				val = grey[slice][srcX][srcY];
+				Color color = Color.color(val,val,val);
+				
+				image_writer.setColor(i, j, color);
 			}
 		}
 		
