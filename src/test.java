@@ -36,6 +36,7 @@ import javafx.stage.Stage;
 public class test extends Application {
 	short cthead[][][]; //store the 3D volume data set
 	float grey[][][]; //store the 3D volume data set converted to 0-1 ready to copy to the image
+	float gammaLookup[][][] = new float[256][256][256]; //array same size as grey
 	short min, max; //min/max value in the 3D volume data set
 	ImageView TopView;
 
@@ -93,7 +94,12 @@ public class test extends Application {
 				System.out.println(newValue.intValue());
 				//Here's the basic code you need to update an image
 				TopView.setImage(null); //clear the old image
-		        Image newImage = nearestNeighbor(76, newValue.intValue()); //go get the slice image to new scale
+				Image newImage = null;
+				if (rb1.isSelected()) {
+					newImage = nearestNeighbor(76, newValue.intValue()); //slice scaled using nearest neighbor
+				} else if (rb2.isSelected()) {
+					newImage = bilinear(76, newValue.intValue()); //slice scaled using bilinear
+				}
 				TopView.setImage(newImage); //Update the GUI so the new image is displayed
             } 
         });
@@ -102,8 +108,10 @@ public class test extends Application {
 		gamma_slider.valueProperty().addListener(new ChangeListener<Number>() { 
 			public void changed(ObservableValue <? extends Number >  
 						observable, Number oldValue, Number newValue) { 
-
+				//print new gamma value
 				System.out.println(newValue.doubleValue());
+				//change intensity values in lookup table using new gamma value
+				gamma(76, newValue.doubleValue());
 			}
 		});
 		
@@ -190,9 +198,133 @@ public class test extends Application {
 		return image;
 	}
 	
+	//TODO use lookup table
+	public void gamma(int slice, double gammaVal) {
+		WritableImage image = new WritableImage(256, 256);
+		int srcWidth = 256;
+		int srcHeight = 256;
+
+		PixelWriter image_writer = image.getPixelWriter();
+		
+		Color srcColor;
+		float intensity;
+		double val;
+		
+		//for every pixel in grey
+		for (int y = 0; y < srcHeight; y++) {
+			for (int x = 0; x < srcWidth; x++) {
+				val = grey[76][y][x];
+				//calculate intensity using: Intensity = Value^1/gamma
+				intensity = (float) Math.pow(val, 1/gammaVal); 
+				//set value in lookup table to intensity
+				gammaLookup[slice][y][x] = intensity;
+			}
+		}
+	}
+	
+	//TODO tidy this up and debug all calculations to see why gradient between pixels isnt liner in final image
+	//Scales an image to the desired image size using a nearest neighbor algorithm
+	public Image bilinear(int slice, float pixelScale) {
+		//scale factor relative to the default cubic slice size of 256
+		int srcWidth = 256;
+		int srcHeight = 256;
+		int destWidth = (int) pixelScale;
+		int destHeight = (int) pixelScale;
+
+		float topLeftColor;
+		float topRightColor;
+		float bottomLeftColor;
+		float bottomRightColor;
+		
+		float xTopInterpolation;
+		float xBottomInterpolation;
+		float yFinalInterpolation;
+		
+		float leftCenter;
+		float topCenter;
+		
+		WritableImage scaledImage = new WritableImage(destWidth, destHeight);
+		
+		PixelWriter image_writer = scaledImage.getPixelWriter();
+		
+		//for every pixel in the new image
+		for (int y = 0; y < destHeight - 5; y++) {
+			for (int x = 0; x < destWidth - 5; x++) {
+				float currentY = y;
+				float currentX = x;
+				
+				//calculate the greyscale value in the scaled image based on a ratio of the old image
+				float srcY = srcHeight * (currentY/destHeight); 
+				float srcX =  srcWidth * (currentX/destWidth);
+				int closestY = (int) Math.floor(srcHeight * (currentY/destHeight)); 
+				int closestX = (int) Math.floor(srcWidth * (currentX/destWidth));
+				
+				//find the center on the X axis for the top and bottom left pixels 
+				leftCenter = (float) (Math.floor(srcX - 0.5) + 0.5);
+				//find the distance between the srcX and the leftCenter X
+				float xDist = srcX - leftCenter;
+				
+				//find the center on the Y axis for the top pixels
+				topCenter = (float) (Math.floor(srcY - 0.5) + 0.5);
+				//find the distance between the srcY and the topCenter Y
+				float yDist = srcY - topCenter;
+				
+				/* calculate the ratios of how much the left and right pixel will be included in 
+				 * the final grey value.
+				 * the left-right (x - axis) ratio for the top and bottom pair of pixels are the
+				 * same so we re-use the ratio.
+				 */
+				float rightRatio = xDist;
+				float leftRatio = 1 - xDist;
+				
+				/* calculate the ratios of how much the combined top and bottom pixel pairs will
+				 * be included in the final value.
+				 */
+				float bottomRatio = yDist;
+				float topRatio = 1 - yDist;
+				
+//				System.out.println("srcX:" + srcX + " xDist:" + xDist + " Left center: " + leftCenter + 
+//						" Ratio: " + leftRatio + " x1 check: " + (leftRatio + rightRatio));
+//				System.out.println("srcY:" + srcY + " yDist:" + yDist + " Top center: " + topCenter + 
+//						" Ratio: " + rightRatio + " y1 check: " + (bottomRatio + topRatio));
+				
+				
+				//color values for the 4 corners of expanded square from gamma-adjusted dataset
+				topLeftColor = gammaLookup[slice][closestY + 1][closestX + 1]; //y + 1
+				topRightColor = gammaLookup[slice][closestY + 1][closestX]; //y + 1
+				bottomLeftColor = gammaLookup[slice][closestY][closestX + 1];
+				bottomRightColor = gammaLookup[slice][closestY][closestX];
+
+				
+//				if(closestY < 150) {
+//					System.out.println("closest X: " + closestX + " closest Y: " + closestY + " topLeft: " + topLeftColor
+//							+ " topRight: " + topRightColor + " bottomLeft: " + bottomLeftColor + " bottomRight: " 
+//							+ bottomRightColor);
+//				}
+				
+				
+				//colour interpolated between the top pair of pixels
+				xTopInterpolation = (float) (topLeftColor * leftRatio + topRightColor * rightRatio);
+				//colour interpolated between bottom pair of pixels
+				xBottomInterpolation = (float) (bottomLeftColor * leftRatio + bottomRightColor * rightRatio);
+				//colour interpolated between top and bottom pair interpolation
+				yFinalInterpolation = (float) (xTopInterpolation * topRatio + xBottomInterpolation * bottomRatio);
+				
+				//TODO interpolation calculations are correct, something is going wrong elsewhere. looks alright.
+				
+				Color color = Color.color(yFinalInterpolation, yFinalInterpolation, yFinalInterpolation);
+				
+				image_writer.setColor(x, y, color);
+			}
+		}
+		
+		return scaledImage;
+	}
+	
+	
 	//Scales an image to the desired image size using a nearest neighbor algorithm
 	public Image nearestNeighbor(int slice, float pixelScale) {
-		//scale factor relative to the default cubic slice size of 256
+		//scale factor relative to the default square slice size of 256
 		float scaleFactor = pixelScale/256;
 		int srcWidth = 256;
 		int srcHeight = 256;
@@ -200,28 +332,26 @@ public class test extends Application {
 		int destHeight = (int) pixelScale;
 		
 		WritableImage scaledImage = new WritableImage(destWidth, destHeight);
-		System.out.println("srcWidth: " + srcWidth);
-		System.out.println("destWidth: " + destWidth);
-		//System.out.println("srcY: " + srcWidth * (100.0/destWidth));
 		
 		PixelWriter image_writer = scaledImage.getPixelWriter();
 		
 		double val;
 		
-		for (int i = 0; i < destHeight; i++) {
-			for (int j = 0; j < destWidth; j++) {
-				float currentY = i;
-				float currentX = j;
+		//for every pixel in the new image
+		for (int y = 0; y < destHeight; y++) {
+			for (int x = 0; x < destWidth; x++) {
+				float currentY = y;
+				float currentX = x;
 				
+				//calculate the greyscale value in the scaled image based on a ratio of the old image
 				int srcY = (int) Math.min(Math.floor(srcHeight * (currentY/destHeight)), srcHeight); 
 				int srcX = (int) Math.min(Math.floor(srcWidth * (currentX/destWidth)), srcWidth);
-				//System.out.println("current x: " + currentX);
-				//System.out.println("x: " + srcX);
 				
-				val = grey[slice][srcX][srcY];
+				//get value from gamma adjusted data set
+				val = gammaLookup[slice][srcX][srcY];
 				Color color = Color.color(val,val,val);
 				
-				image_writer.setColor(i, j, color);
+				image_writer.setColor(y, x, color);
 			}
 		}
 		
