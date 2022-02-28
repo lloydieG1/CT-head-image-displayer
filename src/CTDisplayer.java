@@ -33,7 +33,7 @@ import javafx.scene.image.PixelReader;
 import javafx.scene.paint.Color;
 import javafx.stage.Stage;
 
-public class test extends Application {
+public class CTDisplayer extends Application {
 	short cthead[][][]; //store the 3D volume data set
 	float grey[][][]; //store the 3D volume data set converted to 0-1 ready to copy to the image
 	float gammaLookup[][][] = new float[256][256][256]; //array same size as grey
@@ -316,15 +316,10 @@ public class test extends Application {
 				//colour interpolated between top and bottom pair interpolation
 				yFinalInterpolation = (float) (xTopInterpolation * topRatio + xBottomInterpolation * bottomRatio);
 				
-				//System.out.println("topleft: " + topLeftColor + " top right: " + topRightColor + " topinterp: " + xTopInterpolation);
-				System.out.println("bottom ratio: " + bottomRatio + " top ratio: " + topRatio);
-				
 				Color color = Color.color(yFinalInterpolation, yFinalInterpolation, yFinalInterpolation);
-				
 				image_writer.setColor(x, y, color);
 			}
 		}
-		
 		return scaledImage;
 	}
 	
@@ -358,8 +353,7 @@ public class test extends Application {
 				
 				image_writer.setColor(x, y, color);
 			}
-		}
-		
+		}	
 		return scaledImage;
 	}
 	
@@ -380,14 +374,13 @@ public class test extends Application {
 		for (int row = 0; row < rows; row++) {
 			for (int column = 0; column < columns; column++) {
 				//get the current slice to be added to the thumbnail image
-				Image sliceImage = bilinear(currentSlice, thumbnailSize);
+				Image sliceImage = nearestNeighbor(currentSlice, thumbnailSize);
 				PixelReader sliceReader = sliceImage.getPixelReader();
 
 				if(currentSlice < numSlices - 1) {
 					/* read each pixel of the slice and add to the correct location in 
 					 * the thumbnail view based on the current column and row
 					 */
-					System.out.println(sliceImage.getWidth());
 					for (int y = 0; y < sliceImage.getHeight(); y++) {
 						for (int x = 0; x < sliceImage.getWidth(); x++) {
 							Color slicePixel = sliceReader.getColor(x, y);
@@ -431,11 +424,11 @@ public class test extends Application {
 		
 		//Add mouse over handler - the large image is change to the image the mouse is over
 		thumb_view.addEventHandler(javafx.scene.input.MouseEvent.MOUSE_MOVED, event -> {
-			System.out.println(event.getX()+"  "+event.getY() 
-			+ " slice: " + findSliceFromThumbnail(event.getX(), event.getY()));
-			
 			int selectedSlice = findSliceFromThumbnail(event.getX(), event.getY());
 			
+			System.out.println("x: " + event.getX()+ " y: " +event.getY() 
+			+ " slice: " + selectedSlice);		
+		
 			currentSlice = selectedSlice;
 			TopView.setImage(null); //clear the old image
 			Image newImage = null;
